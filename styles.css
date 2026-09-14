@@ -7,6 +7,9 @@
 @font-face{font-family:'Roboto Slab';font-style:normal;font-weight:700;font-display:swap;src:url(fonts/roboto-slab-700.woff2) format('woff2');}
 
   :root{
+    /* L'application n'a qu'une palette claire : sans cette déclaration, un
+       téléphone en thème sombre repeint champs et listes en noir sur noir. */
+    color-scheme: light;
     --bg: #F2F0DC;
     --panel: #FEFDF6;
     --ink: #20291B;
@@ -14,7 +17,9 @@
     --wood: #2F6B39;
     --wood-dark: #204A27;
     --forest: #2F6B39;
-    --rust: #C98A00;
+    /* #C98A00 ne donnait que 2,9:1 sur le panneau : le dépassement de stock,
+       écrit en 13 px, était le texte le moins lisible de l'application. */
+    --rust: #8A5A00;
     --line: #DAD6AE;
     --danger: #A23B2E;
     --ok-bg: #2F6B39;
@@ -36,7 +41,21 @@
     margin:0;
     -webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px;}
+  /* viewport-fit=cover fait passer la page sous l'encoche et la barre de
+     gestes : les marges reprennent les zones sûres du téléphone. */
+  .wrap{
+    max-width:760px;
+    margin:0 auto;
+    padding:20px 16px 60px;
+    padding-top:max(20px, env(safe-area-inset-top));
+    padding-left:max(16px, env(safe-area-inset-left));
+    padding-right:max(16px, env(safe-area-inset-right));
+    padding-bottom:max(60px, env(safe-area-inset-bottom));
+  }
+
+  /* Anneau de focus visible et identique partout : les boutons sans bordure
+     perdaient le leur sur plusieurs navigateurs. */
+  :focus-visible{outline:2px solid var(--wood);outline-offset:2px;}
 
   .plate{
     background:var(--wood);
@@ -46,7 +65,16 @@
     margin-bottom:18px;
     border-bottom:5px solid var(--yellow);
   }
-  .plate-inner{display:flex;align-items:center;gap:16px;}
+  .plate-inner{display:flex;align-items:center;gap:12px 16px;flex-wrap:wrap;}
+  .plate-title{flex:1 1 170px;min-width:0;}
+  /* Fond plein plutôt que blanc translucide : sur le vert, le texte n'atteignait
+     que 4,05:1 et passait sous le seuil de lisibilité. */
+  .lock-btn{
+    margin-left:auto;flex-shrink:0;
+    background:var(--wood-dark);color:#F5EFE0;
+    border:1px solid rgba(255,255,255,.28);border-radius:4px;
+    font-size:13px;font-weight:600;padding:0 14px;min-height:40px;
+  }
   .plate-logo{width:56px;height:auto;flex-shrink:0;border-radius:6px;background:#fff;padding:4px;}
   .plate h1{
     font-family:'Roboto Slab', serif;
@@ -57,12 +85,21 @@
   }
   .plate p{margin:0;font-size:14px;color:#E7DCC4;}
 
-  .tabs{
+  /* Le trait gris appartient à la barre, pas à la zone qui défile : dans un
+     conteneur à overflow, le soulignement de l'onglet actif était rogné. */
+  .tabbar{
     display:flex;
+    align-items:stretch;
     gap:4px;
     border-bottom:1px solid var(--line);
     margin-bottom:20px;
+  }
+  .tabs{
+    display:flex;
+    gap:4px;
     overflow-x:auto;
+    flex:1;
+    min-width:0;
   }
   .tab{
     font-family:'Inter', sans-serif;
@@ -71,11 +108,12 @@
     color:var(--ink-soft);
     background:none;
     border:none;
-    padding:10px 14px 12px;
+    /* 44 px : la cible tactile recommandée, doigts froids et gants compris. */
+    min-height:44px;
+    padding:10px 14px;
     cursor:pointer;
     white-space:nowrap;
     border-bottom:2px solid transparent;
-    margin-bottom:-1px;
   }
   .tab.active{color:var(--wood-dark);font-weight:600;border-bottom-color:var(--yellow-dark);}
 
@@ -100,9 +138,30 @@
   .toast.ok{background:#E6EAE2;color:var(--forest);border:1px solid #C6D2BE;}
   .toast.err{background:#F2E1DC;color:var(--danger);border:1px solid #E3C0B6;}
 
+  /* Première question sur le terrain : combien il en reste, au total. */
+  .summary{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    align-items:baseline;
+    gap:6px 14px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-left:4px solid var(--wood);
+    border-radius:4px;
+    padding:12px 14px;
+    margin-bottom:12px;
+  }
+  .summary-main{font-size:15px;}
+  .summary-main b{font-family:'Roboto Slab', serif;font-size:19px;}
+
   .legend{margin-bottom:16px;font-size:12.5px;color:var(--ink-soft);}
   .color-group{margin-bottom:18px;}
-  .color-group-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .color-group-head{
+    display:flex;align-items:center;gap:8px;margin:0 0 8px;
+    font-family:'Inter', sans-serif;font-size:13px;font-weight:600;
+  }
+  .color-name{color:var(--ink-soft);}
   .dot{width:12px;height:12px;border-radius:3px;display:inline-block;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.12);}
 
   .grid{
@@ -148,7 +207,9 @@
   select, input[type=number], input[type=text]{
     width:100%;
     font-family:'Inter', sans-serif;
-    font-size:15px;
+    /* En dessous de 16 px, Safari iOS zoome la page dès qu'on touche le champ
+       et il faut ensuite la repincer pour revoir les onglets. */
+    font-size:16px;
     padding:9px 10px;
     border:1px solid var(--line);
     border-radius:4px;
@@ -172,7 +233,8 @@
   .btn-ghost{background:none;color:var(--ink-soft);border:1px solid var(--line);}
   .btn-ghost:hover{color:var(--ink);}
   .btn-danger{background:none;color:var(--danger);}
-  .btn-sm{padding:6px 10px;font-size:13px;}
+  .btn-sm{padding:9px 12px;font-size:13px;min-height:40px;}
+  .mini-label{margin:0 0 2px;font-size:12px;}
   button:disabled{opacity:0.45;cursor:not-allowed;}
 
   .setting-row{
@@ -189,20 +251,21 @@
   .setting-row .spacer{flex:1;}
 
   .swatches{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  /* Pastilles de 20 px : on visait à côté une fois sur trois au pouce. */
   .swatch{
     padding:0;appearance:none;-webkit-appearance:none;
-    width:20px;height:20px;border-radius:5px;cursor:pointer;
+    width:30px;height:30px;border-radius:6px;cursor:pointer;
     border:2px solid transparent;
     box-shadow:inset 0 0 0 1px rgba(0,0,0,0.12);
   }
   .swatch.selected{border-color:var(--ink);}
   .swatch-auto{
-    font-size:11px;color:var(--ink-soft);
-    border:1px solid var(--line);border-radius:5px;
-    padding:3px 8px;background:#fff;cursor:pointer;height:20px;line-height:12px;
+    font-size:12px;color:var(--ink-soft);
+    border:1px solid var(--line);border-radius:6px;
+    padding:0 10px;background:#fff;cursor:pointer;height:30px;
   }
   .swatch-auto.selected{border-color:var(--ink);color:var(--ink);font-weight:600;}
-  .color-picker{width:24px;height:24px;padding:0;border:1px solid var(--line);border-radius:5px;cursor:pointer;background:none;}
+  .color-picker{width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:6px;cursor:pointer;background:none;}
 
   /* Le <label> qui ouvre le sélecteur de fichier doit se présenter comme les
      boutons qui l'entourent : la règle générique label{display:block} lui
@@ -223,7 +286,7 @@
 
   /* .setting-row input l'emportait en spécificité sur .color-picker : le
      sélecteur de couleur libre s'étirait en barre de 80 px de large. */
-  .setting-row .color-picker{width:24px;height:24px;flex-shrink:0;padding:0;}
+  .setting-row .color-picker{width:30px;height:30px;flex-shrink:0;padding:0;}
 
   .foot-actions{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
   .muted{color:var(--ink-soft);font-size:12.5px;}
@@ -240,14 +303,23 @@
   }
   .hist-row:last-child{border-bottom:none;}
   .hist-row .hist-date{color:var(--ink-soft);font-size:12px;}
-  .security-screen{min-height:100vh;display:grid;place-items:center;padding:20px;background:var(--bg);}
+  .hist-more{margin-top:10px;}
+  /* 100dvh suit la barre d'adresse qui se rétracte ; 100vh la comptait
+     toujours et poussait la carte du PIN sous le bord de l'écran. */
+  .security-screen{
+    min-height:100vh;
+    min-height:100dvh;
+    display:grid;place-items:center;background:var(--bg);
+    padding:max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+            max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  }
   .security-card{width:min(100%,390px);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:24px;box-shadow:0 12px 35px rgba(32,41,27,.12);}
   .security-card h1{font-family:'Roboto Slab',serif;margin:0 0 8px;font-size:25px;}
   .security-card p{color:var(--ink-soft);font-size:14px;line-height:1.45;margin:0 0 18px;}
   .security-card input{letter-spacing:.25em;text-align:center;font-size:20px;margin-bottom:12px;}
   .security-error{min-height:20px;color:var(--danger);font-size:13px;margin-bottom:8px;}
   .data-actions{display:flex;flex-wrap:wrap;gap:8px;}
-  .lock-btn{margin-left:auto;}
+  .data-actions button, .data-actions label.btn-ghost{min-height:44px;}
   /* Le champ fichier était en display:none : le <label> l'ouvrait à la souris,
      mais il sortait de l'ordre de tabulation. Hors écran, il reste focusable. */
   .visually-hidden{
@@ -260,4 +332,11 @@
   }
   .visually-hidden:focus-visible + label,
   label:has(+ .visually-hidden:focus-visible){outline:2px solid var(--wood);outline-offset:2px;}
-  @media(max-width:560px){.setting-row-top{flex-wrap:wrap}.setting-row .spacer{flex-basis:100%}.plate h1{font-size:23px}.lock-btn{margin-left:0}}
+  @media(max-width:560px){
+    .setting-row-top{flex-wrap:wrap}
+    .setting-row .spacer{flex-basis:100%}
+    .plate h1{font-size:23px}
+    /* Au pouce, sur une seule main : le bouton qui valide prend la largeur. */
+    form > .btn-primary{width:100%;min-height:48px}
+    .data-actions button, .data-actions label.btn-ghost{flex:1 1 100%;justify-content:center}
+  }

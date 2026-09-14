@@ -6,14 +6,17 @@ réseau**, ce qui est l'usage normal en camp.
 
 ## Fonctions
 
-- Stock par taille, regroupé par couleur de marquage, avec jauge de disponibilité.
+- Stock par taille, regroupé par couleur de marquage, avec jauge de disponibilité et
+  total disponible en tête de page.
 - Sortie et retour de perches, avec historique horodaté par type de mouvement.
 - Réglages : ajout et suppression de tailles, quantité totale, couleur assignée
-  (palette de 20 teintes ou sélecteur libre), remise à niveau du stock.
+  (palette de 20 teintes nommées, ou sélecteur libre), remise à niveau du stock.
 - Export et import JSON, avec copie de secours automatique avant tout import.
 - Accès protégé par un code PIN.
 - Installable (PWA) et **entièrement utilisable hors connexion** : aucune ressource
   n'est chargée depuis un domaine tiers.
+- Utilisable au clavier et avec un lecteur d'écran : onglets parcourus aux flèches,
+  couleurs annoncées par leur nom, notifications lues à voix haute.
 
 ## Où sont les données
 
@@ -30,6 +33,19 @@ Conséquences à connaître :
 
 Le transfert d'un appareil à l'autre se fait par « Exporter en JSON » d'un côté et
 « Importer un JSON » de l'autre.
+
+## Conditions de fonctionnement
+
+Deux exigences du navigateur, dont l'absence est signalée à l'écran plutôt que de
+laisser l'application muette :
+
+- **Contexte sécurisé.** La vérification du code PIN passe par `crypto.subtle`, qui
+  n'existe qu'en HTTPS ou sur `localhost`. Servir la page en `http://` sur une adresse
+  du réseau local — pour l'installer sur les téléphones, par exemple — empêche donc
+  le déverrouillage.
+- **Stockage autorisé.** En navigation privée sur iPhone, ou quand le stockage du site
+  est bloqué, `localStorage` refuse la moindre écriture : l'application le dit et
+  n'affiche pas un inventaire qu'elle ne saurait pas conserver.
 
 ## Ce que le code PIN protège, et ce qu'il ne protège pas
 
@@ -110,6 +126,9 @@ correctement le service worker et le manifeste.
 
 - `size` en mètres, `total` et `stock` entiers positifs, `color` en `#RRGGBB` ou `null`.
 - `type` vaut `sortie` ou `retour`.
-- À l'import : 1 Mo maximum, 1 000 tailles et 10 000 mouvements au plus.
+- À l'import : 1 Mo maximum, 1 000 tailles et 10 000 mouvements au plus. Les tailles sont
+  arrondies à deux décimales, celle affichée, et plafonnées à 100 m.
 - À l'enregistrement, l'historique est plafonné aux **500 mouvements les plus récents de
-  chaque type**, sans quoi le stockage du navigateur finit par saturer.
+  chaque type**, sans quoi le stockage du navigateur finit par saturer. Les mouvements
+  importés sont d'abord retriés du plus récent au plus ancien : un fichier rangé dans
+  l'autre sens perdrait sinon ses mouvements récents plutôt que ses vieux.

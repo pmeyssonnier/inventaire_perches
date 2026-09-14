@@ -29,25 +29,33 @@
     <div class="plate">
       <div class="plate-inner">
         <img class="plate-logo" src="icons/logo.png" width="330" height="214" alt="" decoding="async">
-        <div>
+        <div class="plate-title">
           <h1>Perches</h1>
           <p>Inventaire des perches du Patro Sainte-Suzanne</p>
         </div>
+        <!-- Verrouiller est une action globale, pas une section. Dans la barre
+             d'onglets, elle poussait « Réglages » hors de l'écran sur un
+             téléphone : il fallait faire défiler la barre pour la retrouver. -->
+        <button class="lock-btn" type="button" id="lock-app">Verrouiller</button>
       </div>
     </div>
-    <div class="tabs" role="tablist" aria-label="Sections de l’inventaire">
-      <button class="tab" type="button" role="tab" id="tab-inventaire" data-tab="inventaire" aria-controls="tab-content" aria-selected="false">Inventaire</button>
-      <button class="tab" type="button" role="tab" id="tab-sortie" data-tab="sortie" aria-controls="tab-content" aria-selected="false">Sortie</button>
-      <button class="tab" type="button" role="tab" id="tab-retour" data-tab="retour" aria-controls="tab-content" aria-selected="false">Retour</button>
-      <button class="tab" type="button" role="tab" id="tab-reglages" data-tab="reglages" aria-controls="tab-content" aria-selected="false">Réglages</button>
-      <button class="tab lock-btn" type="button" id="lock-app">Verrouiller</button>
+    <div class="tabbar">
+      <div class="tabs" role="tablist" aria-label="Sections de l’inventaire">
+        <button class="tab" type="button" role="tab" id="tab-inventaire" data-tab="inventaire" aria-controls="tab-content" aria-selected="false" tabindex="-1">Inventaire</button>
+        <button class="tab" type="button" role="tab" id="tab-sortie" data-tab="sortie" aria-controls="tab-content" aria-selected="false" tabindex="-1">Sortie</button>
+        <button class="tab" type="button" role="tab" id="tab-retour" data-tab="retour" aria-controls="tab-content" aria-selected="false" tabindex="-1">Retour</button>
+        <button class="tab" type="button" role="tab" id="tab-reglages" data-tab="reglages" aria-controls="tab-content" aria-selected="false" tabindex="-1">Réglages</button>
+      </div>
     </div>
     <div id="tab-content" role="tabpanel" tabindex="-1"></div>
   </div>
 
 </div>
 
-<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<!-- La bulle visuelle porte hidden, qu'un lecteur d'écran ne réveille pas :
+     le même texte part dans une région live permanente, hors écran. -->
+<div class="toast" id="toast" aria-hidden="true" hidden></div>
+<div class="visually-hidden" id="toast-live" role="status" aria-live="polite"></div>
 
 <script src="app.js"></script>
 </body>
