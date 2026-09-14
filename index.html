@@ -228,7 +228,10 @@
 (function(){
   const KEY = 'perches-scouts-inventory';
   const PIN_KEY = 'perches-scouts-pin-v1';
+  const BACKUP_KEY = 'perches-scouts-inventory-backup';
+  const MAX_IMPORT_BYTES = 1024 * 1024;
   let state = { poles: [], movements: [], activeTab: 'inventaire', loading: true, toast: null, authenticated: false };
+  let toastTimer = null;
 
   const PALETTE = [
     '#E63946','#F3722C','#F9C74F','#FFD60A','#A3CE2D',
@@ -276,7 +279,33 @@
     state.authenticated = true;
     load();
   }
-  function lock(){ state.authenticated = false; renderSecurity(); }
+  function lock(){
+    state.authenticated = false;
+    state.toast = null;
+    if(toastTimer) clearTimeout(toastTimer);
+    renderSecurity();
+  }
+  async function changePin(){
+    const current = prompt('Code PIN actuel :');
+    if(current === null) return;
+    if(await hashPin(current) !== localStorage.getItem(PIN_KEY)){ showToast('err','Code PIN actuel incorrect.'); return; }
+    const next = prompt('Nouveau code PIN (4 à 8 chiffres) :');
+    if(next === null) return;
+    if(!validPin(next)){ showToast('err','Le nouveau PIN doit contenir entre 4 et 8 chiffres.'); return; }
+    const confirmation = prompt('Confirmez le nouveau code PIN :');
+    if(next !== confirmation){ showToast('err','Les deux nouveaux codes ne correspondent pas.'); return; }
+    localStorage.setItem(PIN_KEY, await hashPin(next));
+    showToast('ok','Code PIN modifié.');
+  }
+  function resetApplication(){
+    if(!confirm('PIN oublié ? Cette opération effacera définitivement l’inventaire local et le code PIN. Continuer ?')) return;
+    if(!confirm('Dernière confirmation : supprimer toutes les données locales ?')) return;
+    localStorage.removeItem(KEY);
+    localStorage.removeItem(BACKUP_KEY);
+    localStorage.removeItem(PIN_KEY);
+    state = { poles: [], movements: [], activeTab: 'inventaire', loading: true, toast: null, authenticated: false };
+    renderSecurity();
+  }
   function renderSecurity(error=''){
     const setup = !hasPin();
     document.getElementById('app').innerHTML = `<div class="security-screen"><form class="security-card" id="pin-form">
@@ -285,14 +314,50 @@
       <label for="pin">Code PIN</label><input id="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="${setup?'new-password':'current-password'}" required autofocus>
       ${setup ? '<label for="pin-confirm">Confirmer le code</label><input id="pin-confirm" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password" required>' : ''}
       <div class="security-error">${error}</div><button class="btn-primary" type="submit">${setup ? 'Créer le PIN' : 'Déverrouiller'}</button>
+      ${setup ? '' : '<button class="btn-danger btn-sm" id="reset-app" type="button">PIN oublié / réinitialiser</button>'}
     </form></div>`;
     document.getElementById('pin-form').addEventListener('submit',e=>{e.preventDefault();unlock(document.getElementById('pin').value,setup?document.getElementById('pin-confirm').value:'');});
+    const resetBtn=document.getElementById('reset-app');
+    if(resetBtn) resetBtn.addEventListener('click',resetApplication);
+  }
+  function normalizeData(data){
+    if(!data || typeof data !== 'object' || !Array.isArray(data.poles) || !Array.isArray(data.movements)) throw new Error('format');
+    if(data.version != null && data.version !== 1) throw new Error('version');
+    if(data.poles.length > 1000 || data.movements.length > 10000) throw new Error('volume');
+    const ids = new Set();
+    const poles = data.poles.map((raw,index)=>{
+      if(!raw || typeof raw !== 'object') throw new Error('perche');
+      const size=Number(raw.size), total=Number(raw.total), stock=Number(raw.stock);
+      if(!Number.isFinite(size)||size<=0||!Number.isInteger(total)||total<0||!Number.isInteger(stock)||stock<0) throw new Error('valeur');
+      const color=raw.color == null ? null : String(raw.color).toUpperCase();
+      if(color !== null && !/^#[0-9A-F]{6}$/.test(color)) throw new Error('couleur');
+      let id=typeof raw.id==='string' && /^[A-Za-z0-9_-]{1,80}$/.test(raw.id) ? raw.id : 'p'+Date.now()+'_'+index;
+      if(ids.has(id)) id='p'+Date.now()+'_'+index;
+      ids.add(id);
+      return {id,size,total,stock,color};
+    });
+    const movements = data.movements.map((raw,index)=>{
+      if(!raw || typeof raw !== 'object' || !['sortie','retour'].includes(raw.type)) throw new Error('mouvement');
+      const size=Number(raw.size), qty=Number(raw.qty);
+      if(!Number.isFinite(size)||size<=0||!Number.isInteger(qty)||qty<=0) throw new Error('mouvement');
+      const date=new Date(raw.date);
+      if(Number.isNaN(date.getTime())) throw new Error('date');
+      const id=typeof raw.id==='string' && /^[A-Za-z0-9_-]{1,80}$/.test(raw.id) ? raw.id : 'm'+Date.now()+'_'+index;
+      return {id,type:raw.type,size,qty,date:date.toISOString()};
+    });
+    return {poles,movements};
   }
   function load(){
     try{
       const parsed = JSON.parse(localStorage.getItem(KEY) || '{}');
-      state.poles = parsed.poles || [];
-      state.movements = parsed.movements || [];
+      if(parsed.poles || parsed.movements){
+        const clean=normalizeData({poles:parsed.poles||[],movements:parsed.movements||[]});
+        state.poles=clean.poles;
+        state.movements=clean.movements;
+      } else {
+        state.poles=[];
+        state.movements=[];
+      }
     }catch(e){
       state.poles = [];
       state.movements = [];
@@ -304,31 +369,60 @@
   function save(){
     try{
       localStorage.setItem(KEY, JSON.stringify({version:1,poles:state.poles,movements:state.movements,updatedAt:new Date().toISOString()}));
+      return true;
     }catch(e){
       showToast('err', "La sauvegarde a échoué, réessaie.");
+      return false;
     }
   }
   function exportJson(){
     const data={version:1,exportedAt:new Date().toISOString(),poles:state.poles,movements:state.movements};
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob), a=document.createElement('a');
-    a.href=url;a.download=`inventaire-perches-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);
+    a.href=url;a.download=`inventaire-perches-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     showToast('ok','Sauvegarde JSON exportée.');
   }
   function importJson(file){
+    if(file.size > MAX_IMPORT_BYTES){ showToast('err','Le fichier dépasse la taille maximale de 1 Mo.'); return; }
     const reader=new FileReader();
     reader.onload=()=>{try{
       const data=JSON.parse(reader.result);
-      if(!Array.isArray(data.poles)||!Array.isArray(data.movements)) throw new Error('format');
+      const clean=normalizeData(data);
       if(!confirm('Remplacer l’inventaire actuel par le contenu de ce fichier ?')) return;
-      state.poles=data.poles;state.movements=data.movements;save();showToast('ok','Inventaire importé avec succès.');render();
+      const previous=localStorage.getItem(KEY);
+      if(previous) localStorage.setItem(BACKUP_KEY,previous);
+      const oldPoles=state.poles, oldMovements=state.movements;
+      state.poles=clean.poles;
+      state.movements=clean.movements;
+      if(save()) showToast('ok','Inventaire importé avec succès. Une copie de secours a été conservée.');
+      else { state.poles=oldPoles; state.movements=oldMovements; }
+      render();
     }catch(e){showToast('err','Fichier JSON invalide ou incompatible.');}};
+    reader.onerror=()=>showToast('err','Impossible de lire le fichier JSON.');
     reader.readAsText(file);
+  }
+  function restoreBackup(){
+    const raw=localStorage.getItem(BACKUP_KEY);
+    if(!raw){ showToast('err','Aucune copie de secours disponible.'); return; }
+    if(!confirm('Restaurer l’inventaire présent avant le dernier import ?')) return;
+    try{
+      const clean=normalizeData(JSON.parse(raw));
+      const current=localStorage.getItem(KEY);
+      const oldPoles=state.poles, oldMovements=state.movements;
+      state.poles=clean.poles;
+      state.movements=clean.movements;
+      if(save()){
+        if(current) localStorage.setItem(BACKUP_KEY,current);
+        showToast('ok','Copie de secours restaurée.');
+      } else { state.poles=oldPoles; state.movements=oldMovements; }
+      render();
+    }catch(e){ showToast('err','La copie de secours est invalide.'); }
   }
   function showToast(kind, text){
     state.toast = {kind, text};
     render();
-    setTimeout(()=>{ state.toast = null; render(); }, 3200);
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>{ state.toast = null; if(state.authenticated) render(); }, 3200);
   }
 
   // ---- actions ----
@@ -340,34 +434,39 @@
     if(state.poles.some(p => Math.abs(p.size - size) < 0.001)){
       showToast('err', 'Cette taille existe déjà dans l\'inventaire.'); return;
     }
-    state.poles.push({ id: 'p'+Date.now()+Math.random().toString(16).slice(2), size, total, stock: total, color: null });
-    save();
-    showToast('ok', `Taille ${fmtSize(size)} ajoutée à l'inventaire.`);
+    const pole={ id: 'p'+Date.now()+Math.random().toString(16).slice(2), size, total, stock: total, color: null };
+    state.poles.push(pole);
+    if(save()) showToast('ok', `Taille ${fmtSize(size)} ajoutée à l'inventaire.`);
+    else state.poles=state.poles.filter(p=>p!==pole);
     if(state.activeTab === 'reglages' && state.poles.length === 1){ /* stay */ }
   }
   function updateTotal(id, totalStr){
     const total = parseInt(totalStr, 10);
     const p = findPole(id);
     if(!p || isNaN(total) || total < 0) return;
+    const previous=p.total;
     p.total = total;
-    save();
+    if(!save()) p.total=previous;
   }
   function deletePole(id){
+    const previous=state.poles;
     state.poles = state.poles.filter(p=>p.id!==id);
-    save();
+    if(!save()) state.poles=previous;
     render();
   }
   function resetOne(id){
     const p = findPole(id);
     if(!p) return;
+    const previous=p.stock;
     p.stock = p.total;
-    save();
-    showToast('ok', `Stock des perches ${fmtSize(p.size)} remis à niveau.`);
+    if(save()) showToast('ok', `Stock des perches ${fmtSize(p.size)} remis à niveau.`);
+    else p.stock=previous;
   }
   function resetAll(){
+    const previous=state.poles.map(p=>p.stock);
     state.poles.forEach(p=> p.stock = p.total);
-    save();
-    showToast('ok', 'Tout le stock a été remis à niveau.');
+    if(save()) showToast('ok', 'Tout le stock a été remis à niveau.');
+    else state.poles.forEach((p,i)=>p.stock=previous[i]);
   }
   function checkout(id, qtyStr){
     const p = findPole(id);
@@ -376,9 +475,10 @@
     if(isNaN(qty) || qty <= 0){ showToast('err','Indique une quantité valide.'); return; }
     if(qty > p.stock){ showToast('err', `Stock insuffisant : ${p.stock} perche(s) de ${fmtSize(p.size)} disponible(s).`); return; }
     p.stock -= qty;
-    state.movements.unshift({ id:'m'+Date.now(), type:'sortie', size:p.size, qty, date:new Date().toISOString() });
-    save();
-    showToast('ok', `${qty} perche(s) de ${fmtSize(p.size)} sortie(s) du stock.`);
+    const movement={ id:'m'+Date.now(), type:'sortie', size:p.size, qty, date:new Date().toISOString() };
+    state.movements.unshift(movement);
+    if(save()) showToast('ok', `${qty} perche(s) de ${fmtSize(p.size)} sortie(s) du stock.`);
+    else { p.stock+=qty; state.movements=state.movements.filter(m=>m!==movement); }
     render();
   }
   function restock(id, qtyStr){
@@ -386,20 +486,24 @@
     const qty = parseInt(qtyStr, 10);
     if(!p){ showToast('err','Choisis une taille.'); return; }
     if(isNaN(qty) || qty <= 0){ showToast('err','Indique une quantité valide.'); return; }
+    if(p.stock+qty>p.total && !confirm(`Le retour portera le stock à ${p.stock+qty}, au-dessus du total déclaré (${p.total}). Continuer ?`)) return;
     p.stock += qty;
-    state.movements.unshift({ id:'m'+Date.now(), type:'retour', size:p.size, qty, date:new Date().toISOString() });
-    save();
-    showToast('ok', `${qty} perche(s) de ${fmtSize(p.size)} remise(s) en stock.`);
+    const movement={ id:'m'+Date.now(), type:'retour', size:p.size, qty, date:new Date().toISOString() };
+    state.movements.unshift(movement);
+    if(save()) showToast('ok', `${qty} perche(s) de ${fmtSize(p.size)} remise(s) en stock.`);
+    else { p.stock-=qty; state.movements=state.movements.filter(m=>m!==movement); }
     render();
   }
   function clearHistory(kind){
+    const previous=state.movements;
     state.movements = state.movements.filter(m => m.type !== kind);
-    save();
+    if(!save()) state.movements=previous;
     render();
   }
 
   // ---- render ----
   function render(){
+    if(!state.authenticated){ renderSecurity(); return; }
     const app = document.getElementById('app');
     app.innerHTML = `
       <div class="wrap">
@@ -581,6 +685,14 @@
           <button type="button" class="btn-primary" id="export-json">Exporter en JSON</button>
           <label for="import-json" class="btn-ghost" style="cursor:pointer">Importer un JSON</label>
           <input type="file" id="import-json" accept="application/json,.json">
+          <button type="button" class="btn-ghost" id="restore-backup" ${localStorage.getItem(BACKUP_KEY)?'':'disabled'}>Restaurer avant import</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Sécurité</h2>
+        <div class="data-actions">
+          <button type="button" class="btn-ghost" id="change-pin">Modifier le code PIN</button>
+          <button type="button" class="btn-ghost" id="lock-settings">Verrouiller maintenant</button>
         </div>
       </div>
     `;
@@ -589,11 +701,17 @@
   function attachHandlers(){
     const lockBtn=document.getElementById('lock-app');
     if(lockBtn) lockBtn.addEventListener('click',lock);
+    const lockSettings=document.getElementById('lock-settings');
+    if(lockSettings) lockSettings.addEventListener('click',lock);
+    const changePinBtn=document.getElementById('change-pin');
+    if(changePinBtn) changePinBtn.addEventListener('click',changePin);
     const exportBtn=document.getElementById('export-json');
     if(exportBtn) exportBtn.addEventListener('click',exportJson);
     const importInput=document.getElementById('import-json');
     if(importInput) importInput.addEventListener('change',()=>{if(importInput.files[0]) importJson(importInput.files[0]);importInput.value='';});
-    document.querySelectorAll('.tab').forEach(btn=>{
+    const restoreBtn=document.getElementById('restore-backup');
+    if(restoreBtn) restoreBtn.addEventListener('click',restoreBackup);
+    document.querySelectorAll('.tab[data-tab]').forEach(btn=>{
       btn.addEventListener('click', ()=>{ state.activeTab = btn.dataset.tab; render(); });
     });
 
