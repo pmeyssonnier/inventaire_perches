@@ -1,0 +1,58 @@
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Permissions requises par actions/deploy-pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un seul déploiement à la fois, sans annuler celui en cours
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Une faute de syntaxe dans app.js rendrait l'application muette : le
+      # service worker continuerait à servir l'ancienne version depuis le cache
+      # et la panne passerait inaperçue. On la détecte donc avant publication.
+      - name: Vérifier la syntaxe JavaScript
+        run: |
+          node --check app.js
+          node --check service-worker.js
+          python3 -c "import json; json.load(open('manifest.webmanifest'))"
+
+      # Prérequis (une seule fois) : Settings → Pages → Source = « GitHub Actions ».
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      # Le nom du cache porte le SHA du commit : chaque déploiement repart d'un
+      # cache neuf, sans avoir à incrémenter un numéro de version à la main.
+      - name: Versionner le cache du service worker
+        run: |
+          sed -i "s/^const BUILD_ID = 'dev';/const BUILD_ID = '${GITHUB_SHA}';/" service-worker.js
+          grep -q "const BUILD_ID = '${GITHUB_SHA}';" service-worker.js
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # L'application est servie telle quelle depuis la racine du dépôt
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

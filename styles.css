@@ -1,3 +1,11 @@
+/* Polices auto-hébergées (sous-ensemble latin) : identiques hors connexion,
+   et plus aucune requête vers fonts.googleapis.com. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;src:url(fonts/inter-400.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;src:url(fonts/inter-500.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;src:url(fonts/inter-600.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:700;font-display:swap;src:url(fonts/inter-700.woff2) format('woff2');}
+@font-face{font-family:'Roboto Slab';font-style:normal;font-weight:700;font-display:swap;src:url(fonts/roboto-slab-700.woff2) format('woff2');}
+
   :root{
     --bg: #F2F0DC;
     --panel: #FEFDF6;
@@ -14,6 +22,11 @@
     --yellow-dark: #C98A00;
   }
   *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;background:var(--bg);}
+  /* .security-screen est en display:grid : sans !important, l'attribut hidden
+     ne masquerait rien. */
+  [hidden]{display:none !important;}
   #app{
     font-family:'Inter', system-ui, sans-serif;
     color:var(--ink);
@@ -66,14 +79,23 @@
   }
   .tab.active{color:var(--wood-dark);font-weight:600;border-bottom-color:var(--yellow-dark);}
 
+  /* La notification flotte au-dessus du contenu : elle ne fait plus partie du
+     flux reconstruit à chaque rendu, donc elle ne déplace plus la page. */
   .toast{
+    position:fixed;
+    left:50%;
+    bottom:max(16px, env(safe-area-inset-bottom));
+    transform:translateX(-50%);
+    z-index:1000;
+    width:max-content;
+    max-width:min(calc(100% - 32px), 460px);
     font-size:13.5px;
     padding:10px 14px;
     border-radius:5px;
-    margin-bottom:16px;
     display:flex;
     align-items:center;
     gap:8px;
+    box-shadow:0 8px 24px rgba(32,41,27,.18);
   }
   .toast.ok{background:#E6EAE2;color:var(--forest);border:1px solid #C6D2BE;}
   .toast.err{background:#F2E1DC;color:var(--danger);border:1px solid #E3C0B6;}
@@ -168,6 +190,7 @@
 
   .swatches{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
   .swatch{
+    padding:0;appearance:none;-webkit-appearance:none;
     width:20px;height:20px;border-radius:5px;cursor:pointer;
     border:2px solid transparent;
     box-shadow:inset 0 0 0 1px rgba(0,0,0,0.12);
@@ -180,6 +203,27 @@
   }
   .swatch-auto.selected{border-color:var(--ink);color:var(--ink);font-weight:600;}
   .color-picker{width:24px;height:24px;padding:0;border:1px solid var(--line);border-radius:5px;cursor:pointer;background:none;}
+
+  /* Le <label> qui ouvre le sélecteur de fichier doit se présenter comme les
+     boutons qui l'entourent : la règle générique label{display:block} lui
+     donnait la taille et la couleur d'une étiquette de champ. */
+  label.btn-ghost{
+    display:inline-flex;
+    align-items:center;
+    margin:0;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:14.5px;
+    padding:10px 18px;
+    border-radius:4px;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  label.btn-ghost:hover{color:var(--ink);}
+
+  /* .setting-row input l'emportait en spécificité sur .color-picker : le
+     sélecteur de couleur libre s'étirait en barre de 80 px de large. */
+  .setting-row .color-picker{width:24px;height:24px;flex-shrink:0;padding:0;}
 
   .foot-actions{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
   .muted{color:var(--ink-soft);font-size:12.5px;}
@@ -204,5 +248,16 @@
   .security-error{min-height:20px;color:var(--danger);font-size:13px;margin-bottom:8px;}
   .data-actions{display:flex;flex-wrap:wrap;gap:8px;}
   .lock-btn{margin-left:auto;}
-  input[type=file]{display:none;}
+  /* Le champ fichier était en display:none : le <label> l'ouvrait à la souris,
+     mais il sortait de l'ordre de tabulation. Hors écran, il reste focusable. */
+  .visually-hidden{
+    position:absolute;
+    width:1px;height:1px;
+    margin:-1px;padding:0;border:0;
+    overflow:hidden;
+    clip-path:inset(50%);
+    white-space:nowrap;
+  }
+  .visually-hidden:focus-visible + label,
+  label:has(+ .visually-hidden:focus-visible){outline:2px solid var(--wood);outline-offset:2px;}
   @media(max-width:560px){.setting-row-top{flex-wrap:wrap}.setting-row .spacer{flex-basis:100%}.plate h1{font-size:23px}.lock-btn{margin-left:0}}
